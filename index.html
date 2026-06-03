@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>左右探索課題 | Therabby</title>
+  <meta name="description" content="左右に配置されたターゲットを探して選ぶ、視覚探索の試作ブラウザアプリです。" />
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #172033;
+      --muted: #667085;
+      --line: #d8dee9;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --target: #2563eb;
+      --distractor: #c3c8d4;
+      --danger: #dc2626;
+      --shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(37, 99, 235, 0.12), transparent 32rem),
+        linear-gradient(180deg, #ffffff 0%, var(--bg) 48%, #eef2ff 100%);
+    }
+
+    .page {
+      width: min(1120px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 42px;
+    }
+
+    .app-shell {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(216, 222, 233, 0.9);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 24px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.9));
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--primary-dark);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.7rem, 4vw, 2.7rem);
+      line-height: 1.12;
+      letter-spacing: -0.04em;
+    }
+
+    .lead {
+      max-width: 720px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      line-height: 1.8;
+      font-size: 0.98rem;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 18px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      font: inherit;
+    }
+
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+    .primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
+    }
+
+    .primary:hover:not(:disabled) { background: var(--primary-dark); }
+
+    .secondary {
+      background: #eef2ff;
+      color: #1e3a8a;
+    }
+
+    .ghost {
+      background: #ffffff;
+      color: #344054;
+      border: 1px solid var(--line);
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      padding: 20px;
+    }
+
+    .instruction-card,
+    .stage-card,
+    .stats-grid,
+    .note-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+    }
+
+    .instruction-card {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .instruction-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .stage-card {
+      position: relative;
+      overflow: hidden;
+      background: #fbfcff;
+    }
+
+    .stage-toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      height: clamp(390px, 60vh, 620px);
+      min-height: 360px;
+      background:
+        linear-gradient(90deg, rgba(37, 99, 235, 0.04) 0%, transparent 48%, transparent 52%, rgba(37, 99, 235, 0.04) 100%),
+        #ffffff;
+      overflow: hidden;
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    .midline {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 2px;
+      transform: translateX(-1px);
+      background: repeating-linear-gradient(180deg, rgba(102, 112, 133, 0.28) 0 10px, transparent 10px 20px);
+      pointer-events: none;
+    }
+
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+      line-height: 1.8;
+    }
+
+    .stimulus {
+      position: absolute;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      display: grid;
+      place-items: center;
+      border: 3px solid #fff;
+      box-shadow: 0 7px 20px rgba(15, 23, 42, 0.16);
+    }
+
+    .target {
+      background: var(--target);
+      cursor: pointer;
+    }
+
+    .target::after {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    .target.hit {
+      background: #16a34a;
+      pointer-events: none;
+      animation: pop 0.2s ease-out;
+    }
+
+    .distractor {
+      width: 24px;
+      height: 24px;
+      background: var(--distractor);
+      box-shadow: none;
+      opacity: 0.75;
+    }
+
+    @keyframes pop {
+      50% { transform: translate(-50%, -50%) scale(1.25); }
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .stat-card {
+      min-height: 92px;
+      padding: 14px;
+      border-radius: 15px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .stat-value {
+      margin-top: 10px;
+      font-size: clamp(1.55rem, 4vw, 2.2rem);
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+    }
+
+    .note-card {
+      padding: 16px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .note-card strong { color: var(--text); }
+
+    .log {
+      margin-top: 10px;
+      max-height: 90px;
+      overflow: auto;
+      font-size: 0.86rem;
+      color: #475467;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .is-fullscreen {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9999;
+      margin: 0;
+      border-radius: 0;
+      background: #fff;
+      overflow: auto;
+    }
+
+    .is-fullscreen .stage { height: calc(100vh - 260px); }
+
+    @media (max-width: 760px) {
+      .page { width: min(100% - 14px, 1120px); padding: 10px 0 20px; }
+      .app-header,
+      .instruction-card { flex-direction: column; align-items: stretch; }
+      .header-actions { justify-content: flex-start; }
+      .content { padding: 12px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .stage { height: 58vh; min-height: 360px; }
+      button { width: 100%; }
+      .header-actions button { width: auto; flex: 1 1 130px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="app-shell" id="left-right-search-app">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Therabby Demo</p>
+          <h1>左右探索課題</h1>
+          <p class="lead">左右に配置された青いターゲットを探して選ぶ課題です。左右空間への探索量、見落とし、探索順序を観察するための試作ブラウザアプリです。</p>
+        </div>
+        <div class="header-actions">
+          <button class="secondary" type="button" data-reset>リセット</button>
+          <button class="ghost" type="button" data-fullscreen>全画面</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <div class="instruction-card">
+          <p>青いターゲットを左右の空間から探してクリックまたはタップします。灰色の点は妨害刺激です。診断用ではなく、探索の偏りを説明・記録するための補助課題です。</p>
+          <div class="header-actions">
+            <button class="primary" type="button" data-start>開始</button>
+            <button class="secondary" type="button" data-finish disabled>終了</button>
+          </div>
+        </div>
+
+        <div class="stage-card">
+          <div class="stage-toolbar">
+            <span>中央線を基準に左右の探索を確認します</span>
+            <span data-message>開始すると固定配置の探索課題が表示されます。</span>
+          </div>
+          <div class="stage" data-stage aria-label="左右探索課題の実施領域">
+            <div class="midline" aria-hidden="true"></div>
+            <div class="empty-state" data-empty>開始すると固定配置の探索課題が表示されます。</div>
+          </div>
+        </div>
+
+        <div class="stats-grid" aria-live="polite">
+          <div class="stat-card">
+            <div class="stat-label">左検出</div>
+            <div class="stat-value" data-left>-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">右検出</div>
+            <div class="stat-value" data-right>-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">見落とし</div>
+            <div class="stat-value" data-omissions>-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">所要時間</div>
+            <div class="stat-value" data-time>-</div>
+          </div>
+        </div>
+
+        <div class="note-card">
+          <strong>記録メモ</strong>
+          <div data-note>開始後、探索順序と左右別の検出数がここに表示されます。</div>
+          <div class="log" data-log>ログなし</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const root = document.querySelector('#left-right-search-app');
+      const stage = root.querySelector('[data-stage]');
+      const empty = root.querySelector('[data-empty]');
+      const startButton = root.querySelector('[data-start]');
+      const finishButton = root.querySelector('[data-finish]');
+      const resetButton = root.querySelector('[data-reset]');
+      const fullscreenButton = root.querySelector('[data-fullscreen]');
+      const message = root.querySelector('[data-message]');
+      const note = root.querySelector('[data-note]');
+      const log = root.querySelector('[data-log]');
+      const leftValue = root.querySelector('[data-left]');
+      const rightValue = root.querySelector('[data-right]');
+      const omissionsValue = root.querySelector('[data-omissions]');
+      const timeValue = root.querySelector('[data-time]');
+
+      const targets = [
+        { id: 'L1', side: 'left', x: 16, y: 22 },
+        { id: 'L2', side: 'left', x: 31, y: 38 },
+        { id: 'L3', side: 'left', x: 12, y: 57 },
+        { id: 'L4', side: 'left', x: 38, y: 74 },
+        { id: 'R1', side: 'right', x: 64, y: 24 },
+        { id: 'R2', side: 'right', x: 83, y: 36 },
+        { id: 'R3', side: 'right', x: 69, y: 61 },
+        { id: 'R4', side: 'right', x: 88, y: 77 }
+      ];
+
+      const distractors = [
+        [22, 13], [43, 19], [57, 15], [74, 17], [7, 33], [47, 33], [53, 42],
+        [92, 48], [25, 51], [42, 59], [59, 55], [76, 55], [18, 83], [48, 82],
+        [56, 78], [79, 84], [94, 68]
+      ];
+
+      let startedAt = null;
+      let timerId = null;
+      let hits = [];
+      let running = false;
+
+      function resetStats() {
+        hits = [];
+        startedAt = null;
+        running = false;
+        leftValue.textContent = '-';
+        rightValue.textContent = '-';
+        omissionsValue.textContent = '-';
+        timeValue.textContent = '-';
+        message.textContent = '開始すると固定配置の探索課題が表示されます。';
+        note.textContent = '開始後、探索順序と左右別の検出数がここに表示されます。';
+        log.textContent = 'ログなし';
+        startButton.disabled = false;
+        finishButton.disabled = true;
+        clearInterval(timerId);
+      }
+
+      function clearStage() {
+        stage.querySelectorAll('.stimulus').forEach((node) => node.remove());
+        empty.hidden = false;
+      }
+
+      function updateStats() {
+        const left = hits.filter((hit) => hit.side === 'left').length;
+        const right = hits.filter((hit) => hit.side === 'right').length;
+        const omissions = targets.length - hits.length;
+        leftValue.textContent = String(left);
+        rightValue.textContent = String(right);
+        omissionsValue.textContent = String(omissions);
+        if (startedAt) {
+          timeValue.textContent = `${((Date.now() - startedAt) / 1000).toFixed(1)}秒`;
+        }
+        if (hits.length > 0) {
+          const order = hits.map((hit, index) => `${index + 1}:${hit.id}`).join(' → ');
+          log.textContent = order;
+          note.textContent = `探索順序：${order}`;
+        }
+        if (hits.length === targets.length) finishTask();
+      }
+
+      function addStimulus(item, type) {
+        const dot = document.createElement('button');
+        dot.className = `stimulus ${type}`;
+        dot.type = 'button';
+        dot.style.left = `${item.x}%`;
+        dot.style.top = `${item.y}%`;
+        dot.setAttribute('aria-label', type === 'target' ? `ターゲット ${item.id}` : '妨害刺激');
+        if (type === 'target') {
+          dot.dataset.id = item.id;
+          dot.dataset.side = item.side;
+          dot.addEventListener('click', () => {
+            if (!running || dot.classList.contains('hit')) return;
+            dot.classList.add('hit');
+            hits.push({ id: item.id, side: item.side, time: Date.now() - startedAt });
+            updateStats();
+          });
+        } else {
+          dot.disabled = true;
+        }
+        stage.appendChild(dot);
+      }
+
+      function renderStage() {
+        clearStage();
+        empty.hidden = true;
+        distractors.forEach(([x, y]) => addStimulus({ x, y }, 'distractor'));
+        targets.forEach((target) => addStimulus(target, 'target'));
+      }
+
+      function startTask() {
+        resetStats();
+        renderStage();
+        running = true;
+        startedAt = Date.now();
+        startButton.disabled = true;
+        finishButton.disabled = false;
+        message.textContent = '実施中：青いターゲットをすべて選んでください。';
+        timerId = setInterval(updateStats, 100);
+        updateStats();
+      }
+
+      function finishTask() {
+        if (!running && startedAt === null) return;
+        running = false;
+        clearInterval(timerId);
+        updateStats();
+        finishButton.disabled = true;
+        startButton.disabled = false;
+        const left = hits.filter((hit) => hit.side === 'left').length;
+        const right = hits.filter((hit) => hit.side === 'right').length;
+        const omissions = targets.length - hits.length;
+        message.textContent = omissions === 0 ? '終了：すべてのターゲットを検出しました。' : '終了：未選択のターゲットがあります。';
+        note.textContent = `結果：左${left}、右${right}、見落とし${omissions}。正答数だけでなく、探索開始位置・迷い・修正行動も合わせて記録してください。`;
+      }
+
+      function resetTask() {
+        clearStage();
+        resetStats();
+      }
+
+      function toggleFullscreen() {
+        root.classList.toggle('is-fullscreen');
+        fullscreenButton.textContent = root.classList.contains('is-fullscreen') ? '戻る' : '全画面';
+      }
+
+      startButton.addEventListener('click', startTask);
+      finishButton.addEventListener('click', finishTask);
+      resetButton.addEventListener('click', resetTask);
+      fullscreenButton.addEventListener('click', toggleFullscreen);
+      resetTask();
+    })();
+  </script>
+</body>
+</html>
